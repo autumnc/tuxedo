@@ -104,26 +104,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let bg = Style::default().bg(theme.panel).fg(theme.fg);
 
-    // Narrow screens get a single-column layout; wider ones split into two.
-    let use_single = inner.width < 60;
-
     let mut content: Vec<Line> = Vec::new();
-    if use_single {
-        let all: &[Section] = &[NAVIGATION, EDITING, VIEW, SYSTEM, FORMAT];
-        content.extend(render_sections_trimmed(theme, all));
-    } else {
-        let kb_lines = two_columns(theme, inner.width, &[NAVIGATION, EDITING], &[VIEW, SYSTEM]);
-        content.extend(kb_lines);
-        content.push(divider_line(theme, inner.width));
-        let (fmt_left, fmt_right) = FORMAT.1.split_at(FORMAT.1.len().div_ceil(2));
-        let fmt_lines = two_columns(
-            theme,
-            inner.width,
-            &[(FORMAT.0, fmt_left)],
-            &[("", fmt_right)],
-        );
-        content.extend(fmt_lines);
-    }
+    let all: &[Section] = &[NAVIGATION, EDITING, VIEW, SYSTEM, FORMAT];
+    content.extend(render_sections_trimmed(theme, all));
 
     // Scrolling.
     let content_h = inner.height as usize;
@@ -140,45 +123,6 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     frame.render_widget(Paragraph::new(visible).style(bg), inner);
-}
-
-fn divider_line<'a>(theme: &Theme, width: u16) -> Line<'a> {
-    Line::from(Span::styled(
-        "─".repeat(usize::from(width)),
-        Style::default().fg(theme.border),
-    ))
-}
-
-/// Render `left` and `right` section lists side-by-side. Each side gets half
-/// the available width; rows are zipped so column heights stay aligned. The
-/// trailing blank that `render_sections` adds after every section is dropped
-/// from the last section in each column — visually that just means the column
-/// ends flush with its final entry rather than carrying dead space below.
-fn two_columns<'a>(
-    theme: &Theme,
-    total_width: u16,
-    left: &[Section],
-    right: &[Section],
-) -> Vec<Line<'a>> {
-    let left_lines = render_sections_trimmed(theme, left);
-    let right_lines = render_sections_trimmed(theme, right);
-    let rows = left_lines.len().max(right_lines.len());
-    let half = usize::from(total_width / 2);
-    let mut out: Vec<Line> = Vec::with_capacity(rows);
-    for i in 0..rows {
-        let mut spans: Vec<Span> = Vec::new();
-        let left_spans: Vec<Span> = left_lines.get(i).map_or_else(Vec::new, |l| l.spans.clone());
-        let left_width: usize = left_spans.iter().map(|s| s.content.chars().count()).sum();
-        spans.extend(left_spans);
-        if left_width < half {
-            spans.push(Span::raw(" ".repeat(half - left_width)));
-        }
-        if let Some(r) = right_lines.get(i) {
-            spans.extend(r.spans.clone());
-        }
-        out.push(Line::from(spans));
-    }
-    out
 }
 
 fn render_sections_trimmed<'a>(theme: &Theme, sections: &[Section]) -> Vec<Line<'a>> {
@@ -200,9 +144,6 @@ fn line_is_blank(line: &Line) -> bool {
 fn render_sections<'a>(theme: &Theme, sections: &[Section]) -> Vec<Line<'a>> {
     let mut lines: Vec<Line> = Vec::new();
     for (title, items) in sections {
-        // An empty title means "this is a continuation column, skip the
-        // header row" — used to align the right half of a 2-col section
-        // (e.g. FORMAT) with the left half that owns the header.
         if title.is_empty() {
             lines.push(Line::raw(" "));
         } else {
