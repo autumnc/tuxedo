@@ -3,6 +3,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::app::{
     App, BuilderField, CalendarTarget, DraftOverlay, Mode, REC_UNIT_ORDER, TokenKind, WeekStart,
@@ -323,7 +324,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     ))
     .style(Style::default().bg(theme.panel));
     let cursor = app.draft.cursor().min(app.draft.text().len());
-    let cursor_col = app.draft.text()[..cursor].chars().count();
+    let cursor_col = app.draft.text()[..cursor].width();
     let avail = content_area.width as usize;
     // Pin the cursor to the rightmost visible column whenever it would
     // otherwise overflow. Stateless: when the cursor moves left of the
@@ -424,6 +425,7 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
         Mode::PromptProject => ("+", " ADD PROJECT "),
         Mode::PromptContext => ("@", " TOGGLE CONTEXT "),
         Mode::PromptSaveFilter => ("✦", " SAVE FILTER AS "),
+        Mode::PromptNote => ("#", " NOTE "),
         _ => return,
     };
     let block = Block::default()
@@ -451,10 +453,10 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
         Span::styled(
             sigil,
             Style::default()
-                .fg(if sigil == "+" {
-                    theme.project
-                } else {
-                    theme.context
+                .fg(match sigil {
+                    "+" => theme.project,
+                    "@" => theme.context,
+                    _ => theme.dim,
                 })
                 .add_modifier(Modifier::BOLD),
         ),
@@ -470,6 +472,157 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
         Paragraph::new(line).style(Style::default().bg(theme.panel)),
         input_area,
     );
+}
+
+/// Multi-line note prompt. The dialog is taller than `render_prompt` and
+/// splits the draft text into visual rows — one per display-width-wrapped
+/// line — so the user sees all the note content they've typed. Cursor
+/// highlighting marks the insertion point within the wrapped text.
+pub fn render_note_prompt(frame: &mut Frame, area: Rect, app: &App) {
+    let theme = app.theme();
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border).bg(theme.panel))
+        .title(Line::from(Span::styled(
+            " NOTE ",
+            Style::default()
+                .fg(theme.accent)
+                .add_modifier(Modifier::BOLD),
+        )))
+        .style(Style::default().bg(theme.panel));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let draft = app.draft.text();
+    let cursor_byte = app.draft.cursor().min(draft.len());
+
+    // Available display columns in the content area (leading padding accounted for).
+    let line_w = (inner.width as usize).saturating_sub(2).max(16);
+
+    // Build visual-line breaks by accumulating per-character display width.
+    // Each entry: (byte_start, byte_end_after_this_char, column_after_this_line).
+    let mut line_starts: Vec<usize> = vec![0];
+    let mut col: usize = 0;
+    for (byte, c) in draft.char_indices() {
+        let cw = c.width().unwrap_or(0);
+        if col + cw > line_w && col > 0 {
+            line_starts.push(byte);
+            col = 0;
+        }
+        col += cw;
+    }
+    // Sentinel: one past the end for the last line.
+    line_starts.push(draft.len());
+
+    let total_vlines = line_starts.len().saturating_sub(1).max(1);
+
+    // Which visual line holds the cursor?
+    let mut cursor_vline = 0usize;
+    let mut cur_col: usize = 0;
+    let mut cur_line: usize = 0;
+    for (byte, c) in draft.char_indices() {
+        let cw = c.width().unwrap_or(0);
+        if cur_col + cw > line_w && cur_col > 0 && byte == line_starts[cur_line + 1] {
+            cur_line += 1;
+            cur_col = 0;
+        }
+        if byte >= cursor_byte {
+            cursor_vline = cur_line;
+            break;
+        }
+        cur_col += cw;
+    }
+    if cursor_byte >= draft.len() {
+        cursor_vline = total_vlines.saturating_sub(1);
+    }
+
+    let content_rows = (inner.height as usize).saturating_sub(2); // footer + padding
+    let scroll = scroll_to_keep(cursor_vline, content_rows, total_vlines);
+
+    let mut rendered: Vec<Line> = Vec::new();
+    for i in scroll..(scroll + content_rows).min(total_vlines) {
+        let start = line_starts[i];
+        let end = line_starts[i + 1];
+
+        let mut spans = vec![Span::raw(" ")];
+        let has_cursor = cursor_byte >= start && cursor_byte <= end;
+
+        if !has_cursor {
+            spans.push(Span::styled(
+                &draft[start..end],
+                Style::default().fg(theme.fg),
+            ));
+        } else {
+            if cursor_byte > start {
+                spans.push(Span::styled(
+                    &draft[start..cursor_byte],
+                    Style::default().fg(theme.fg),
+                ));
+            }
+            if cursor_byte < draft.len() {
+                let next = next_boundary(draft, cursor_byte);
+                spans.push(Span::styled(
+                    &draft[cursor_byte..next],
+                    Style::default().fg(theme.panel).bg(theme.fg),
+                ));
+                if next < end {
+                    spans.push(Span::styled(
+                        &draft[next..end],
+                        Style::default().fg(theme.fg),
+                    ));
+                }
+            } else {
+                spans.push(Span::styled("█", Style::default().fg(theme.fg)));
+                // If cursor is at end of this line, show trailing text after block.
+                if cursor_byte < end {
+                    spans.push(Span::styled(
+                        &draft[cursor_byte..end],
+                        Style::default().fg(theme.fg),
+                    ));
+                }
+            }
+        }
+        rendered.push(Line::from(spans).style(Style::default().bg(theme.panel)));
+    }
+
+    while rendered.len() < content_rows {
+        rendered.push(Line::raw("").style(Style::default().bg(theme.panel)));
+    }
+    rendered.push(note_footer(theme));
+
+    frame.render_widget(
+        Paragraph::new(rendered).style(Style::default().bg(theme.panel)),
+        inner,
+    );
+}
+
+fn scroll_to_keep(cursor_line: usize, visible: usize, total: usize) -> usize {
+    if total <= visible {
+        return 0;
+    }
+    let max = total - visible;
+    if cursor_line < visible {
+        0
+    } else {
+        (cursor_line + 1 - visible).min(max)
+    }
+}
+
+fn note_footer<'a>(theme: &Theme) -> Line<'a> {
+    Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            "Enter",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" save · ", Style::default().fg(theme.dim)),
+        Span::styled(
+            "Esc",
+            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" cancel", Style::default().fg(theme.dim)),
+    ])
+    .style(Style::default().bg(theme.panel))
 }
 
 /// Colored example tokens illustrating the todo.txt format.

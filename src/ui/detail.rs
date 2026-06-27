@@ -3,6 +3,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
+use unicode_width::UnicodeWidthChar;
 
 use crate::app::App;
 use crate::theme::Theme;
@@ -29,13 +30,9 @@ fn build_lines<'a>(
     wrap_w: usize,
 ) -> Vec<Line<'a>> {
     let mut rows: Vec<Line> = Vec::new();
-    rows.push(line_panel(
-        theme,
-        vec![Span::styled(
-            " DETAIL",
-            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
-        )],
-    ));
+
+    // ── DETAIL ──────────────────────────────────────────────────────────
+    rows.push(section_header(theme, "DETAIL"));
     rows.push(line_panel(theme, vec![Span::raw(" ")]));
     let Some(t) = task else {
         rows.push(line_panel(
@@ -111,28 +108,6 @@ fn build_lines<'a>(
             ),
         ],
     ));
-
-    // Rendering notes line by line
-    if !t.notes.is_empty() {
-        rows.push(line_panel(
-            theme,
-            vec![Span::styled(" notes", Style::default().fg(theme.dim))],
-        ));
-        for note in &t.notes {
-            let chunks = wrap_words(note, wrap_w.saturating_sub(4));
-            for (i, chunk) in chunks.into_iter().enumerate() {
-                let prefix = if i == 0 { "   - " } else { "     " };
-                rows.push(line_panel(
-                    theme,
-                    vec![Span::styled(
-                        format!("{prefix}{}", chunk.join(" ")),
-                        Style::default().fg(theme.fg),
-                    )],
-                ))
-            }
-        }
-    }
-
     if t.done {
         rows.push(line_panel(
             theme,
@@ -145,17 +120,32 @@ fn build_lines<'a>(
             ],
         ));
     }
+
+    // ── NOTES ───────────────────────────────────────────────────────────
+    if !t.notes.is_empty() {
+        rows.push(line_panel(theme, vec![Span::raw(" ")]));
+        rows.push(section_header(theme, "NOTES"));
+        rows.push(line_panel(theme, vec![Span::raw(" ")]));
+        for note in &t.notes {
+            let chunks = wrap_words(note, wrap_w.saturating_sub(2));
+            for chunk in chunks {
+                rows.push(line_panel(
+                    theme,
+                    vec![Span::styled(
+                        format!(" {}", chunk.join(" ")),
+                        Style::default().fg(theme.fg),
+                    )],
+                ))
+            }
+        }
+    }
+
+    // ── RAW ─────────────────────────────────────────────────────────────
     rows.push(line_panel(theme, vec![Span::raw(" ")]));
-    rows.push(line_panel(
-        theme,
-        vec![Span::styled(
-            " RAW",
-            Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
-        )],
-    ));
+    rows.push(section_header(theme, "RAW"));
     rows.push(line_panel(theme, vec![Span::raw(" ")]));
     let mut state = RawWalk::default();
-    for chunk in wrap_words(&t.raw, wrap_w) {
+    for chunk in wrap_words(&t.clean_raw, wrap_w) {
         let mut spans: Vec<Span> = vec![Span::raw(" ")];
         let mut words = chunk.into_iter();
         if let Some(first) = words.next() {
@@ -168,6 +158,14 @@ fn build_lines<'a>(
         rows.push(line_panel(theme, spans));
     }
     rows
+}
+
+fn section_header<'a>(theme: &Theme, label: &'static str) -> Line<'a> {
+    Line::from(vec![Span::styled(
+        format!(" {label}"),
+        Style::default().fg(theme.dim).add_modifier(Modifier::BOLD),
+    )])
+    .style(Style::default().bg(theme.panel))
 }
 
 #[derive(Default)]
@@ -223,28 +221,57 @@ fn line_panel<'a>(theme: &Theme, spans: Vec<Span<'a>>) -> Line<'a> {
     Line::from(spans).style(Style::default().bg(theme.panel))
 }
 
-/// Wrap `s` to roughly `width` graphemes, returning each output line as a
-/// vector of borrowed words. Borrowing avoids the per-frame `String` alloc
-/// that the previous `Vec<String>` form forced on every render.
+/// Wrap `s` to `width` display columns. Each output line is a vector of
+/// borrowed word slices. Display width uses `unicode_width` so CJK characters
+/// count as 2 columns. A token wider than `width` (common in CJK text without
+/// whitespace) is split character by character so it never overflows.
 fn wrap_words(s: &str, width: usize) -> Vec<Vec<&str>> {
     let mut out: Vec<Vec<&str>> = Vec::new();
-    let mut acc: Vec<&str> = Vec::new();
-    let mut acc_len = 0;
-    for word in s.split_whitespace() {
-        let wlen = word.chars().count();
-        let extra = if acc.is_empty() { 0 } else { 1 };
-        if acc_len + wlen + extra > width && !acc.is_empty() {
-            out.push(std::mem::take(&mut acc));
-            acc_len = 0;
+    let mut line: Vec<&str> = Vec::new();
+    let mut line_w: usize = 0;
+
+    for token in s.split_whitespace() {
+        let token_w: usize = token.chars().map(|c| c.width().unwrap_or(0)).sum();
+        let gap = if line.is_empty() { 0 } else { 1 };
+
+        if token_w <= width {
+            // Fits in a single line.
+            if line_w + gap + token_w > width && !line.is_empty() {
+                out.push(std::mem::take(&mut line));
+                line_w = 0;
+            }
+            if !line.is_empty() {
+                line_w += 1;
+            }
+            line.push(token);
+            line_w += token_w;
+        } else {
+            // Token wider than `width` — split character by character.
+            if !line.is_empty() {
+                out.push(std::mem::take(&mut line));
+                line_w = 0;
+            }
+            let width = width.max(1);
+            let mut byte_start: usize = 0;
+            let mut col: usize = 0;
+            for (byte, c) in token.char_indices() {
+                let cw = c.width().unwrap_or(0);
+                if col + cw > width && col > 0 {
+                    line.push(&token[byte_start..byte]);
+                    out.push(std::mem::take(&mut line));
+                    byte_start = byte;
+                    col = 0;
+                }
+                col += cw;
+            }
+            if byte_start < token.len() {
+                line.push(&token[byte_start..]);
+                line_w = col;
+            }
         }
-        if !acc.is_empty() {
-            acc_len += 1;
-        }
-        acc.push(word);
-        acc_len += wlen;
     }
-    if !acc.is_empty() {
-        out.push(acc);
+    if !line.is_empty() {
+        out.push(line);
     }
     out
 }

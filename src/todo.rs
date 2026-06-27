@@ -93,8 +93,8 @@ pub fn parse_line(raw: &str) -> Result<Task, ParseError> {
     let due = find_kv(rest, "due");
     let rec = find_kv(rest, "rec");
     let threshold = find_kv(rest, "t");
-    let notes = find_quoted_kv(rest, "note");
-    let clean_raw = body_after_quoted_kv(line);
+    let notes = find_hash_notes(line);
+    let clean_raw = body_after_hash_notes(line);
 
     Ok(Task {
         raw: line.to_string(),
@@ -183,28 +183,16 @@ fn find_kv(s: &str, key: &str) -> Option<String> {
     None
 }
 
-/// Find the value of `key:"value" where value can contain spaces and is enclosed in double quotes.
-/// Returns the first hit; later duplicates are ignored.
-fn find_quoted_kv(s: &str, key: &str) -> Vec<String> {
-    let culprit = format!(r#"{key}:""#);
-    let Some(st) = s.find(&culprit) else {
-        return vec![];
-    };
-    if st > 0 {
-        let prev_char = s.as_bytes()[st - 1];
-        if prev_char != b' ' && prev_char != b'\t' {
-            return vec![];
+/// Find `# note content` at the end of a line. Everything after the first ` # `
+/// delimiter is the note. Returns a single-element vec or empty.
+fn find_hash_notes(s: &str) -> Vec<String> {
+    if let Some(pos) = s.find(" # ") {
+        let note = s[pos + 3..].trim();
+        if !note.is_empty() {
+            return vec![note.to_string()];
         }
     }
-    if !is_valid_key(key) {
-        return vec![];
-    }
-    let v_st = st + culprit.len();
-    let rest = &s[v_st..];
-    let Some(end) = rest.find('"') else {
-        return vec![];
-    };
-    rest[..end].split(". ").map(str::to_owned).collect()
+    vec![]
 }
 
 fn is_valid_key(k: &str) -> bool {
@@ -422,23 +410,12 @@ pub fn body_after_priority(raw: &str) -> &str {
     s
 }
 
-pub fn body_after_quoted_kv(raw: &str) -> String {
-    let mut body = raw.to_string();
-    while let Some(st) = body.find(r#":""#) {
-        let before = &body[..st];
-        let after = &body[st + 2..];
-        let st_key = before
-            .rfind(char::is_whitespace)
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        if let Some(second_aps) = after.find('"') {
-            let after = after[second_aps + 1..].trim_start();
-            body = format!("{}{}", &before[..st_key], after);
-        } else {
-            break;
-        }
+pub fn body_after_hash_notes(raw: &str) -> String {
+    if let Some(pos) = raw.find(" # ") {
+        raw[..pos].trim().to_string()
+    } else {
+        raw.trim().to_string()
     }
-    body.trim().to_string()
 }
 
 /// Description text only: strip the leading `x `, done/created dates, and
@@ -447,7 +424,7 @@ pub fn body_after_quoted_kv(raw: &str) -> String {
 /// surviving words collapses to single spaces. Returns an owned `String`
 /// because we're filtering tokens, not slicing a prefix.
 pub fn body_only(raw: &str) -> String {
-    let new_body = body_after_quoted_kv(raw);
+    let new_body = body_after_hash_notes(raw);
     body_after_priority(&new_body)
         .split_whitespace()
         .filter(|tok| !is_meta_token(tok))
@@ -632,5 +609,48 @@ mod tests {
         for (a, b) in parsed.iter().zip(reparsed.iter()) {
             assert_eq!(a.raw, b.raw);
         }
+    }
+
+    #[test]
+    fn parses_hash_note() {
+        let t = parse_line("Buy milk # remember to check price").unwrap();
+        assert_eq!(t.notes, vec!["remember to check price"]);
+        assert_eq!(t.clean_raw, "Buy milk");
+    }
+
+    #[test]
+    fn parses_hash_note_with_metadata() {
+        let t =
+            parse_line("(A) 2026-05-01 Buy milk +shop @home due:2026-05-08 # check price")
+                .unwrap();
+        assert_eq!(t.notes, vec!["check price"]);
+        assert_eq!(t.priority, Some('A'));
+        assert_eq!(t.projects, vec!["shop"]);
+        assert_eq!(t.contexts, vec!["home"]);
+        assert_eq!(t.due.as_deref(), Some("2026-05-08"));
+        assert_eq!(t.clean_raw, "(A) 2026-05-01 Buy milk +shop @home due:2026-05-08");
+    }
+
+    #[test]
+    fn body_after_hash_notes_strips_note() {
+        assert_eq!(
+            body_after_hash_notes("Buy milk # remove this"),
+            "Buy milk"
+        );
+        assert_eq!(
+            body_after_hash_notes("No note here"),
+            "No note here"
+        );
+    }
+
+    #[test]
+    fn hash_note_roundtrips_through_serialize() {
+        let tasks = parse_file("Buy milk # check price\nHello world\n");
+        let s = serialize(&tasks);
+        let reparsed = parse_file(&s);
+        assert_eq!(reparsed[0].notes, vec!["check price"]);
+        assert_eq!(reparsed[0].clean_raw, "Buy milk");
+        assert!(reparsed[1].notes.is_empty());
+        assert_eq!(reparsed[1].clean_raw, "Hello world");
     }
 }

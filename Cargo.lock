@@ -1565,6 +1565,7 @@ dependencies = [
  "qrcode",
  "ratatui",
  "tiny_http",
+ "unicode-width",
 ]
 
 [[package]]

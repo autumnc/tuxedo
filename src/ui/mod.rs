@@ -36,11 +36,13 @@ const DIALOG_MIN_W: u16 = 40;
 const DIALOG_MAX_W: u16 = 100;
 
 const HELP_MAX_H: u16 = 29;
-const HELP_MIN_W: u16 = 76;
+const HELP_MIN_W: u16 = 36;
 const HELP_MAX_W: u16 = 120;
 
 const PROMPT_H: u16 = 5;
 const PROMPT_MAX_W: u16 = 50;
+const PROMPT_NOTE_H: u16 = 12;
+const PROMPT_NOTE_MAX_W: u16 = 60;
 
 const PALETTE_MAX_H: u16 = 20;
 const PALETTE_MIN_W: u16 = 50;
@@ -130,6 +132,12 @@ pub fn draw(frame: &mut Frame, app: &App) {
         Mode::Settings => {
             frame.render_widget(Clear, body_area);
             settings::render(frame, body_area, app);
+        }
+        Mode::PromptNote => {
+            let w: u16 = PROMPT_NOTE_MAX_W.min(area.width.saturating_sub(4));
+            let r = centered_in(area, w, PROMPT_NOTE_H);
+            frame.render_widget(Clear, r);
+            dialog::render_note_prompt(frame, r, app);
         }
         Mode::PromptProject | Mode::PromptContext | Mode::PromptSaveFilter => {
             let w: u16 = PROMPT_MAX_W.min(area.width.saturating_sub(4));

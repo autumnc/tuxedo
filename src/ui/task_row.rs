@@ -126,6 +126,14 @@ pub fn build_line<'a>(task: &'a Task, opts: RowOpts<'a>, theme: &Theme) -> Line<
         emitted_body_token = true;
         rest = &rest[tok_end..];
     }
+    // Notes indicator — label only, not the content.
+    if !task.notes.is_empty() {
+        spans.push(Span::styled(
+            " #notes",
+            Style::default().fg(theme.dim),
+        ));
+    }
+
     let line_style = if opts.cursor {
         Style::default().bg(theme.cursor)
     } else if opts.selected {

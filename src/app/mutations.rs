@@ -218,6 +218,37 @@ impl App {
         }
     }
 
+    pub fn set_note(&mut self, note: &str) {
+        let Some(abs) = self.cur_abs() else {
+            return;
+        };
+        let Some(raw) = self.task_raw(abs) else {
+            return;
+        };
+        // Strip any existing ` # ...` from the raw.
+        let base = if let Some(pos) = raw.find(" # ") {
+            raw[..pos].trim().to_string()
+        } else {
+            raw.trim().to_string()
+        };
+        let new_raw = if note.trim().is_empty() {
+            base
+        } else {
+            format!("{} # {}", base, note.trim())
+        };
+        match self.store.edit_line(abs, &new_raw) {
+            crate::core::EditOutcome::Saved { abs } => {
+                self.flash("note saved");
+                self.after_mutation(abs);
+            }
+            crate::core::EditOutcome::Empty
+            | crate::core::EditOutcome::OutOfRange
+            | crate::core::EditOutcome::TermNotFound => {}
+            crate::core::EditOutcome::Aborted(r) => self.handle_reconcile_abort(r),
+            crate::core::EditOutcome::Error(e) => self.flash(format!("invalid: {e}")),
+        }
+    }
+
     pub fn toggle_week_start_date(&mut self) {
         let week_start = match self.week_start {
             WeekStart::Sunday => WeekStart::Monday,

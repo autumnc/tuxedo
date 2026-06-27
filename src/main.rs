@@ -259,7 +259,7 @@ fn handle_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) {
         Mode::Search => handle_search(app, key),
         Mode::Help => handle_help(app, key),
         Mode::Settings => handle_settings(app, key),
-        Mode::PromptProject | Mode::PromptContext | Mode::PromptSaveFilter => {
+        Mode::PromptProject | Mode::PromptContext | Mode::PromptSaveFilter | Mode::PromptNote => {
             handle_prompt(app, key)
         }
         Mode::PickProject | Mode::PickContext | Mode::PickSavedFilter => handle_pick(app, key),
@@ -602,11 +602,32 @@ fn handle_search(app: &mut App, key: KeyEvent) {
 }
 
 fn handle_help(app: &mut App, key: KeyEvent) {
-    if matches!(
-        key.code,
-        KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q')
-    ) {
-        app.mode = Mode::Normal;
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
+            app.help_scroll.set(0);
+            app.mode = Mode::Normal;
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.help_scroll.set(app.help_scroll.get().saturating_add(1));
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.help_scroll.set(app.help_scroll.get().saturating_sub(1));
+        }
+        KeyCode::PageDown => {
+            app.help_scroll
+                .set(app.help_scroll.get().saturating_add(10));
+        }
+        KeyCode::PageUp => {
+            app.help_scroll
+                .set(app.help_scroll.get().saturating_sub(10));
+        }
+        KeyCode::Home | KeyCode::Char('g') => {
+            app.help_scroll.set(0);
+        }
+        KeyCode::End | KeyCode::Char('G') => {
+            app.help_scroll.set(u16::MAX); // clamped at render time
+        }
+        _ => {}
     }
 }
 
@@ -744,6 +765,7 @@ fn handle_prompt(app: &mut App, key: KeyEvent) {
                 Mode::PromptProject => app.add_project_to_current(&value),
                 Mode::PromptContext => app.toggle_context_on_current(&value),
                 Mode::PromptSaveFilter => app.save_current_filter_as(&value),
+                Mode::PromptNote => app.set_note(&value),
                 _ => {}
             }
         }
@@ -850,6 +872,7 @@ fn resolve_normal_key(app: &mut App, key: KeyEvent, keybinds: &KeyBindings) -> O
         KeyCode::Char('H') => Action::ToggleShowDone,
         KeyCode::Char('F') => Action::ToggleShowFuture,
         KeyCode::Esc => Action::EscapeStack,
+        KeyCode::Char('N') => Action::BeginNote,
         KeyCode::Char('W') => Action::ChangeWeekStart,
         _ => return None,
     })
@@ -878,6 +901,7 @@ fn apply_action(app: &mut App, action: Action) {
             Action::BeginAdd
             | Action::BeginEdit
             | Action::BeginEditInsert
+            | Action::BeginNote
             | Action::CyclePriority
             | Action::ToggleVisual
             | Action::ToggleSelected
@@ -1028,6 +1052,16 @@ fn apply_action(app: &mut App, action: Action) {
         Action::BeginPromptContext => {
             app.mode = Mode::PromptContext;
             app.draft_clear();
+        }
+        Action::BeginNote => {
+            if app.cur_abs().is_some() {
+                let existing = app
+                    .cur_task()
+                    .and_then(|t| t.notes.first().cloned())
+                    .unwrap_or_default();
+                app.draft_set_insert(existing);
+                app.mode = Mode::PromptNote;
+            }
         }
         Action::ToggleLeftPane => {
             app.prefs.toggle_left();

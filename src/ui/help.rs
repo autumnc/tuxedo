@@ -1,5 +1,5 @@
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
@@ -103,39 +103,49 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let bg = Style::default().bg(theme.panel).fg(theme.fg);
 
-    // Keybindings (top, two columns) — divider — Format (bottom, two columns).
-    // Each half splits sections across left/right; the last section in each
-    // column drops its trailing blank so the divider lands tight.
-    let kb_lines = two_columns(theme, inner.width, &[NAVIGATION, EDITING], &[VIEW, SYSTEM]);
-    let kb_height = u16::try_from(kb_lines.len()).unwrap_or(u16::MAX);
+    // Narrow screens get a single-column layout; wider ones split into two.
+    let use_single = inner.width < 60;
 
-    let (fmt_left, fmt_right) = FORMAT.1.split_at(FORMAT.1.len().div_ceil(2));
-    let fmt_left_section: Section = (FORMAT.0, fmt_left);
-    let fmt_right_section: Section = ("", fmt_right);
-    let fmt_lines = two_columns(
-        theme,
-        inner.width,
-        &[fmt_left_section],
-        &[fmt_right_section],
-    );
+    let mut content: Vec<Line> = Vec::new();
+    if use_single {
+        let all: &[Section] = &[NAVIGATION, EDITING, VIEW, SYSTEM, FORMAT];
+        content.extend(render_sections_trimmed(theme, all));
+    } else {
+        let kb_lines = two_columns(theme, inner.width, &[NAVIGATION, EDITING], &[VIEW, SYSTEM]);
+        content.extend(kb_lines);
+        content.push(divider_line(theme, inner.width));
+        let (fmt_left, fmt_right) = FORMAT.1.split_at(FORMAT.1.len().div_ceil(2));
+        let fmt_lines = two_columns(
+            theme,
+            inner.width,
+            &[(FORMAT.0, fmt_left)],
+            &[("", fmt_right)],
+        );
+        content.extend(fmt_lines);
+    }
 
-    let [kb_area, divider, fmt_area] = Layout::vertical([
-        Constraint::Length(kb_height),
-        Constraint::Length(1),
-        Constraint::Min(0),
-    ])
-    .areas(inner);
+    // Scrolling.
+    let content_h = inner.height as usize;
+    let total = content.len().max(1);
+    let max_scroll = total.saturating_sub(content_h);
+    let scroll = (app.help_scroll.get() as usize).min(max_scroll);
+    // Write the clamped scroll back so key handlers see a consistent value.
+    app.help_scroll.set(scroll as u16);
 
-    frame.render_widget(Paragraph::new(kb_lines).style(bg), kb_area);
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            "─".repeat(usize::from(divider.width)),
-            Style::default().fg(theme.border),
-        )))
-        .style(bg),
-        divider,
-    );
-    frame.render_widget(Paragraph::new(fmt_lines).style(bg), fmt_area);
+    let visible: Vec<Line> = if total <= content_h {
+        content
+    } else {
+        content[scroll..(scroll + content_h).min(total)].to_vec()
+    };
+
+    frame.render_widget(Paragraph::new(visible).style(bg), inner);
+}
+
+fn divider_line<'a>(theme: &Theme, width: u16) -> Line<'a> {
+    Line::from(Span::styled(
+        "─".repeat(usize::from(width)),
+        Style::default().fg(theme.border),
+    ))
 }
 
 /// Render `left` and `right` section lists side-by-side. Each side gets half

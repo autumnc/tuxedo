@@ -57,6 +57,7 @@ pub enum Action {
     /// Open the theme picker dialog (j/k to preview, Enter to accept).
     OpenThemePicker,
     ChangeWeekStart,
+    BeginNote,
 }
 
 impl Action {
@@ -108,6 +109,7 @@ impl Action {
             "open_share" | "share" => Some(Self::OpenShare),
             "open_theme_picker" | "theme_picker" => Some(Self::OpenThemePicker),
             "change_week_start" => Some(Self::ChangeWeekStart),
+            "begin_note" | "note" => Some(Self::BeginNote),
             _ => None,
         }
     }

@@ -143,6 +143,8 @@ pub struct App {
     /// view, keyed by `View::idx()`. Updated at render time via `Cell` so the
     /// renderer can keep the cursor row visible without taking `&mut self`.
     pub(crate) view_scroll: [Cell<u16>; 2],
+    /// Scroll offset for the help overlay. Updated at render time via `Cell`.
+    pub help_scroll: Cell<u16>,
     /// Handle to the in-TUI capture server. `None` until the first time
     /// the user presses `s` (or invokes "show capture QR" from the
     /// palette). Once bound, the entry stays for the rest of the
@@ -207,6 +209,7 @@ impl App {
             saved_pick_idx: 0,
             command_palette: CommandPaletteState::default(),
             view_scroll: [Cell::new(0), Cell::new(0)],
+            help_scroll: Cell::new(0),
             share: None,
             theme_pick_orig: 0,
             week_start: WeekStart::Sunday,
