@@ -23,8 +23,8 @@ expression: buffer_to_text(&buf)
      │    +                 add project             SYSTEM                                    │     
      │    yy                copy line to clipboard    : / Ctrl-P        command palette       │     
      │    yb                copy body only            s                 share capture QR      │     
-     │    u                 undo                      ? / ,             help / settings       │     
-     │                                                q                 quit                  │     
+     │    N                 add/edit note             ? / ,             help / settings       │     
+     │    u                 undo                      q                 quit                  │     
      │────────────────────────────────────────────────────────────────────────────────────────│     
      │  FORMAT                                                                                │     
      │    (A)               priority A-Z              due:YYYY-MM-DD    due date              │     
