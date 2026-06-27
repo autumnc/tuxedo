@@ -282,6 +282,7 @@ half_page_up   = "Ctrl-u"
 
 # Editing
 begin_add            = "n"
+begin_note           = "N"
 begin_edit           = "e"
 begin_edit_insert    = "i"
 toggle_complete      = "x"
@@ -353,6 +354,7 @@ chords like `ZZ`, modifier forms like `Ctrl-n` / `Alt-x`, named keys like
 | Key | Action |
 | --- | --- |
 | `n` | add task |
+| `N` | add/edit a note on the current task |
 | `e` | edit current task in Normal mode (see [Edit dialog](#edit-dialog)) |
 | `i` | edit current task in Insert mode (see [Edit dialog](#edit-dialog)) |
 | `x` | toggle complete |
@@ -448,6 +450,10 @@ Standard [todo.txt](https://github.com/todotxt/todo.txt) lines:
 - `2026-04-28` — creation date in ISO 8601
 - `+project` — project tag
 - `@context` — context tag
+- `# note text` — a note attached to the task. Everything after ` # `
+  (space-hash-space) is the note. Press `N` to add or edit. Tasks with
+  a note show a `#notes` label in the list; note content is rendered in
+  the right-hand detail panel under **NOTES**.
 - `key:value` — extension; `due:YYYY-MM-DD` is recognized for sort and
   due-bucket grouping in the list view. Keys you'd rather not see can be
   hidden from the rows via [`hide_keys`](#hiding-keyvalue-tags)
