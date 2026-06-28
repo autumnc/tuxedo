@@ -1,3 +1,5 @@
+use unicode_width::UnicodeWidthStr;
+
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -176,4 +178,9 @@ pub fn render_command_line(frame: &mut Frame, area: Rect, app: &App) {
         Paragraph::new(line).style(Style::default().bg(theme.bg)),
         area,
     );
+
+    let cursor_col = app.draft.text()[..app.draft.cursor().min(app.draft.text().len())].width();
+    let cursor_x = area.x + 3 + cursor_col as u16;
+    let cursor_y = area.y;
+    app.input_cursor_pos.set(Some((cursor_x, cursor_y)));
 }

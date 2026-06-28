@@ -1,36 +1,37 @@
 ---
 source: tests/snapshots.rs
+assertion_line: 226
 expression: buffer_to_text(&buf)
 ---
  FILTERS                   ▶▮◀ /tmp/tuxedo-snapshot.txt  •  15 tas DETAIL                           
      ┌ tuxedo · help ─────────────────────────────────────────────────────────────────────────┐     
- PROJ│  NAVIGATION                                  VIEW                                      │     
-   +w│    j / ↓             next task                 /                 fuzzy search          │     
-   +h│    k / ↑             previous task             fp / fc           filter project/context│     
-   +f│    gg                first task                ff / fs           saved filter pick/save│     
-   +h│    G                 last task                 S                 cycle sort            │     
-   +l│    Ctrl-d / Ctrl-u   page down / up            v                 visual / multi-select │     
-   +p│                                                l                 list view             │     
-   +t│  EDITING                                       a                 archive view          │     
-     │    n                 new task                  A                 archive completed     │rd   
- CONT│    e                 edit line (normal)        H                 show done in list     │     
-   @e│    i                 edit line (insert)        F                 show future in list   │     
-   @h│    r                 reschedule task           [ / ]             toggle filter / detail│     
-   @l│    x                 toggle complete           T                 cycle theme           │     
-   @p│    dd                delete task               D                 cycle density         │     
-     │    p                 cycle priority A→B→C→·    L                 toggle line numbers   │     
+ PROJ│  NAVIGATION                                                                            │     
+   +w│    j / ↓             next task                                                         │     
+   +h│    k / ↑             previous task                                                     │     
+   +f│    gg                first task                                                        │     
+   +h│    G                 last task                                                         │     
+   +l│    Ctrl-d / Ctrl-u   page down / up                                                    │     
+   +p│                                                                                        │     
+   +t│  EDITING                                                                               │     
+     │    n                 new task                                                          │rd   
+ CONT│    e                 edit line (normal)                                                │     
+   @e│    i                 edit line (insert)                                                │     
+   @h│    r                 reschedule task                                                   │     
+   @l│    x                 toggle complete                                                   │     
+   @p│    dd                delete task                                                       │     
+     │    p                 cycle priority A→B→C→·                                            │     
      │    c                 add/remove context                                                │     
-     │    +                 add project             SYSTEM                                    │     
-     │    yy                copy line to clipboard    : / Ctrl-P        command palette       │     
-     │    yb                copy body only            s                 share capture QR      │     
-     │    N                 add/edit note             ? / ,             help / settings       │     
-     │    u                 undo                      q                 quit                  │     
-     │────────────────────────────────────────────────────────────────────────────────────────│     
-     │  FORMAT                                                                                │     
-     │    (A)               priority A-Z              due:YYYY-MM-DD    due date              │     
-     │    YYYY-MM-DD        creation / done date      rec:Nu            recur (u in d/w/m/y/b)│     
-     │    +project          project tag(s)            rec:+Nu           strict: anchor on due:│     
-     │    @context          context tag(s)            x DATE BODY       completed task prefix │     
+     │    +                 add project                                                       │     
+     │    yy                copy line to clipboard                                            │     
+     │    yb                copy body only                                                    │     
+     │    N                 add/edit note                                                     │     
+     │    u                 undo                                                              │     
+     │                                                                                        │     
+     │  VIEW                                                                                  │     
+     │    /                 fuzzy search                                                      │     
+     │    fp / fc           filter project/context                                            │     
+     │    ff / fs           saved filter pick/save                                            │     
+     │    S                 cycle sort                                                        │     
      └────────────────────────────────────────────────────────────────────────────────────────┘     
                                                                                                     
  HELP   ? close help                                         15 open · 2026-05-06 · tuxedo 2026.6.3

@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use ratatui::DefaultTerminal;
+use ratatui::crossterm::cursor;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use std::io::Write;
@@ -201,6 +202,17 @@ fn run(mut terminal: DefaultTerminal, app: &mut App, keybinds: &KeyBindings) -> 
                 let backend = terminal.backend_mut();
                 hyperlinks::emit_overlay(backend, &runs)?;
                 backend.flush()?;
+            }
+            // Position the terminal hardware cursor at the text-input caret
+            // (if any) so that fbterm can report the position to the IME for
+            // candidate-window placement (cursor following / 光标跟随).
+            match app.input_cursor_pos.get() {
+                Some((x, y)) => {
+                    crossterm::execute!(io::stdout(), cursor::MoveTo(x, y), cursor::Show)?;
+                }
+                None => {
+                    crossterm::execute!(io::stdout(), cursor::Hide)?;
+                }
             }
             dirty = false;
         }

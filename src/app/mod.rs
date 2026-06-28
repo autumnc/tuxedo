@@ -154,6 +154,9 @@ pub struct App {
     /// can restore it.
     theme_pick_orig: usize,
     pub week_start: WeekStart,
+    /// Screen position of the text-input cursor, set during rendering
+    /// so the main loop can position the terminal hardware cursor for IME.
+    pub input_cursor_pos: Cell<Option<(u16, u16)>>,
 }
 
 impl App {
@@ -213,6 +216,7 @@ impl App {
             share: None,
             theme_pick_orig: 0,
             week_start: WeekStart::Sunday,
+            input_cursor_pos: Cell::new(None),
         };
         app.recompute_visible();
         app

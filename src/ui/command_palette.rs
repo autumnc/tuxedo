@@ -1,3 +1,5 @@
+use unicode_width::UnicodeWidthStr;
+
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -108,6 +110,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             .collect();
         frame.render_widget(Paragraph::new(lines).style(bg), list_area);
     }
+
+    let cursor_col = app.draft.text()[..app.draft.cursor().min(app.draft.text().len())].width();
+    let cursor_x = inner.x + 3 + cursor_col as u16;
+    let cursor_y = inner.y;
+    app.input_cursor_pos.set(Some((cursor_x, cursor_y)));
 
     let footer = Line::from(vec![
         Span::raw("  "),

@@ -49,6 +49,7 @@ const PALETTE_MIN_W: u16 = 50;
 const PALETTE_MAX_W: u16 = 80;
 
 pub fn draw(frame: &mut Frame, app: &App) {
+    app.input_cursor_pos.set(None);
     let theme = app.theme();
     let area = frame.area();
 

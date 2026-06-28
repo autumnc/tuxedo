@@ -341,6 +341,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         content_area,
     );
 
+    // Report the screen position of the text cursor so the main loop can
+    // position the terminal hardware cursor for IME (e.g. fbterm).
+    let cursor_x = inner.x + PREFIX_W + (cursor_col as u16).saturating_sub(scroll_x);
+    let cursor_y = inner.y + 1;
+    app.input_cursor_pos.set(Some((cursor_x, cursor_y)));
+
     let preview = preview_line(app);
     frame.render_widget(
         Paragraph::new(preview).style(Style::default().bg(theme.panel)),
@@ -472,6 +478,11 @@ pub fn render_prompt(frame: &mut Frame, area: Rect, app: &App) {
         Paragraph::new(line).style(Style::default().bg(theme.panel)),
         input_area,
     );
+
+    let cursor_col = app.draft.text()[..app.draft.cursor().min(app.draft.text().len())].width();
+    let cursor_x = inner.x + 3 + cursor_col as u16;
+    let cursor_y = inner.y;
+    app.input_cursor_pos.set(Some((cursor_x, cursor_y)));
 }
 
 /// Multi-line note prompt. The dialog is taller than `render_prompt` and
@@ -516,25 +527,30 @@ pub fn render_note_prompt(frame: &mut Frame, area: Rect, app: &App) {
 
     let total_vlines = line_starts.len().saturating_sub(1).max(1);
 
-    // Which visual line holds the cursor?
-    let mut cursor_vline = 0usize;
-    let mut cur_col: usize = 0;
-    let mut cur_line: usize = 0;
-    for (byte, c) in draft.char_indices() {
-        let cw = c.width().unwrap_or(0);
-        if cur_col + cw > line_w && cur_col > 0 && byte == line_starts[cur_line + 1] {
-            cur_line += 1;
-            cur_col = 0;
+    // Which visual line holds the cursor, and at what column within it?
+    let (cursor_vline, col_in_line): (usize, usize) = {
+        let mut vline = 0usize;
+        let mut cur_col: usize = 0;
+        let mut cur_line: usize = 0;
+        for (byte, c) in draft.char_indices() {
+            let cw = c.width().unwrap_or(0);
+            if cur_col + cw > line_w && cur_col > 0 && byte == line_starts[cur_line + 1] {
+                cur_line += 1;
+                cur_col = 0;
+            }
+            if byte >= cursor_byte {
+                vline = cur_line;
+                cur_col = draft[line_starts[cur_line]..cursor_byte].width();
+                break;
+            }
+            cur_col += cw;
         }
-        if byte >= cursor_byte {
-            cursor_vline = cur_line;
-            break;
+        if cursor_byte >= draft.len() {
+            vline = total_vlines.saturating_sub(1);
+            cur_col = draft[line_starts[vline]..cursor_byte].width();
         }
-        cur_col += cw;
-    }
-    if cursor_byte >= draft.len() {
-        cursor_vline = total_vlines.saturating_sub(1);
-    }
+        (vline, cur_col)
+    };
 
     let content_rows = (inner.height as usize).saturating_sub(2); // footer + padding
     let scroll = scroll_to_keep(cursor_vline, content_rows, total_vlines);
@@ -594,6 +610,10 @@ pub fn render_note_prompt(frame: &mut Frame, area: Rect, app: &App) {
         Paragraph::new(rendered).style(Style::default().bg(theme.panel)),
         inner,
     );
+
+    let cursor_x = inner.x + 1 + col_in_line as u16;
+    let cursor_y = inner.y + cursor_vline.saturating_sub(scroll) as u16;
+    app.input_cursor_pos.set(Some((cursor_x, cursor_y)));
 }
 
 fn scroll_to_keep(cursor_line: usize, visible: usize, total: usize) -> usize {
